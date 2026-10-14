@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>朱石麟中學 - 運動會管理系統 (智能圖表隱藏版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #3498db;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --dark: #2c3e50;
+            --bg: #f4f7f9;
+        }
+        body { font-family: "Microsoft JhengHei", sans-serif; background: var(--bg); margin: 0; display: flex; }
+        
+        /* --- 登錄介面 --- */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); display: flex; justify-content: center; align-items: center; z-index: 2000;
+        }
+        .login-card {
+            background: white; padding: 40px; border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center;
+        }
+        .login-card h2 { color: var(--dark); margin-bottom: 25px; }
+        .form-group-login { text-align: left; margin-bottom: 15px; }
+        .form-group-login label { display: block; margin-bottom: 5px; font-weight: bold; color: #34495e; }
+        .form-group-login input, .form-group-login select {
+            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; box-sizing: border-box;
+        }
+        .btn-login {
+            width: 100%; padding: 14px; background: var(--primary); color: white;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px;
+        }
+
+        /* --- 後台介面 --- */
+        #adminPanel { display: none; width: 100%; }
+        .sidebar { width: 260px; background: var(--dark); color: white; height: 100vh; position: fixed; padding-top: 20px; z-index: 100; }
+        .sidebar h2 { text-align: center; font-size: 18px; border-bottom: 1px solid #3e4f5f; padding-bottom: 20px; }
+        .nav-item { padding: 15px 25px; cursor: pointer; transition: 0.3s; }
+        .nav-item:hover, .nav-item.active { background: var(--primary); }
+        .main-content { margin-left: 260px; padding: 30px; width: calc(100% - 260px); }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; min-width: 900px; }
+        th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #eee; color: #555; }
+        td { padding: 10px 12px; border-bottom: 1px solid #eee; }
+        
+        .edit-input { width: 90%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .edit-select { width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 3px; color: white; }
+        .btn-edit { background: var(--primary); }
+        .btn-delete { background: var(--danger); }
+        .btn-save { background: var(--success); }
+        .btn-cancel { background: #95a5a6; }
+
+        /* 錯誤紅底樣式 */
+        .input-error { background-color: #ffe6e6 !important; border-color: #ff4d4d !important; }
+
+        /* 動態雙欄/單欄自適應 CSS 網格 */
+        .charts-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; transition: 0.3s; }
+        .charts-grid.single-column { grid-template-columns: 1fr; } /* 當隱藏圓餅圖時，條形圖自動撐滿 */
+        
+        .chart-container { position: relative; height: 300px; }
+        .badge-group { background: #e8f4fd; color: #2980b9; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: bold; }
+        .studid-cell { font-family: 'Courier New', monospace; font-weight: bold; color: #2c3e50; }
+
+        .compare-table { min-width: auto; }
+        .compare-table th, .compare-table td { text-align: center; }
+        .trend-up { color: var(--success); font-weight: bold; }
+        .trend-down { color: var(--danger); font-weight: bold; }
+
+        .filter-container { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .filter-select { padding: 8px 12px; font-size: 14px; border: 1px solid #ddd; border-radius: 6px; background-color: #fff; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="loginOverlay">
+        <div class="login-card">
+            <h2>教師身份驗證</h2>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group-login">
+                    <label>教師 ID (TID)</label>
+                    <input type="text" id="tid" maxlength="6" pattern="\d{6}" required placeholder="6位數字">
+                </div>
+                <div class="form-group-login">
+                    <label>教師姓名</label>
+                    <input type="text" id="tname" maxlength="20" required placeholder="最多20字">
+                </div>
+                <div class="form-group-login">
+                    <label>教師種類</label>
+                    <select id="ttype">
+                        <option value="PE">體育老師 (PE)</option>
+                        <option value="ADMIN">管理員 (ADMIN)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-login">進入系統</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="adminPanel">
+        <div class="sidebar">
+            <h2>運動會管理系統</h2>
+            <div class="nav-item active" id="nav-dash" onclick="showSection('dashboard')">📊 數據看板</div>
+            <div class="nav-item" id="nav-compare" onclick="showSection('comparison')">📈 年度數據對比</div>
+            <div class="nav-item" id="nav-stud" onclick="showSection('students')">👥 學生名單管理</div>
+            <div class="nav-item" onclick="location.reload()" style="margin-top: 50px; color: var(--danger);">🚪 登出系統</div>
+        </div>
+
+        <div class="main-content">
+            <div class="card">
+                <h1 id="welcomeText" style="margin:0;">歡迎</h1>
+                <p id="roleText" style="color: #666; margin-top:5px;"></p>
+            </div>
+
+            <div id="dashboard" class="section">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px;">
+                        <h3 style="margin:0;">2026 年度報名統計概覽</h3>
+                        <div class="filter-container">
+                            <label for="dashboardGenderSelect" style="font-weight:bold; font-size:14px; color:#555;">性別：</label>
+                            <select id="dashboardGenderSelect" class="filter-select" onchange="updateCharts()">
+                                <option value="all">無選擇 (全部性別)</option>
+                                <option value="男">男</option>
+                                <option value="女">女</option>
+                            </select>
+
+                            <label for="dashboardGroupSelect" style="font-weight:bold; font-size:14px; color:#555; margin-left:10px;">組別：</label>
+                            <select id="dashboardGroupSelect" class="filter-select" onchange="updateCharts()">
+                                <option value="all">無選擇 (全部組別)</option>
+                                <option value="甲組">甲組</option>
+                                <option value="乙組">乙組</option>
+                                <option value="丙組">丙組</option>
+                            </select>
+
+                            <label for="dashboardEventSelect" style="font-weight:bold; font-size:14px; color:#555; margin-left:10px;">項目：</label>
+                            <select id="dashboardEventSelect" class="filter-select" onchange="updateCharts()">
+                                <option value="all">全部項目綜合統計</option>
+                                <option value="E01">60米 (徑)</option>
+                                <option value="E02">100米 (徑)</option>
+                                <option value="E03">跳遠 (田)</option>
+                                <option value="E04">鉛球 (田)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="chartsGridWrapper" class="charts-grid">
+                        <div class="chart-container"><canvas id="barChart"></canvas></div>
+                        <div id="pieChartContainer" class="chart-container"><canvas id="pieChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="comparison" class="section" style="display:none;">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin:0;">📈 年度報名人數對比分析</h3>
+                        <div class="filter-container">
+                            <label for="compareYearSelect" style="font-weight:bold; font-size:14px; color:#555;">對比歷史年份：</label>
+                            <select id="compareYearSelect" class="filter-select" onchange="updateCharts()">
+                                <option value="2025">2025 年度 (上一屆)</option>
+                                <option value="2024">2024 年度 (前兩屆)</option>
+                                <option value="2023">2023 年度 (前三屆)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 400px; margin-bottom: 30px;">
+                        <canvas id="compareChart"></canvas>
+                    </div>
+                    <table class="compare-table">
+                        <thead>
+                            <tr>
+                                <th>比賽項目</th>
+                                <th>歷史年度參加人數</th>
+                                <th>本屆報名人數</th>
+                                <th>增減情況</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparisonTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="students" class="section" style="display:none;">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3>報名名單管理 (滿三項需含田徑)</h3>
+                        <span id="dataCount" style="font-weight: bold; color: var(--primary);">總報名人數: 0</span>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>學號</th><th>姓名</th><th>班級</th><th>組別</th>
+                                    <th>項目一</th><th>項目二</th><th>項目三</th><th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let studentsData = [];
+    const events = [
+        { id: 'none', name: '無', type: 'none' },
+        { id: 'E01', name: '60米 (徑)', type: 'track' },
+        { id: 'E02', name: '100米 (徑)', type: 'track' },
+        { id: 'E03', name: '跳遠 (田)', type: 'field' },
+        { id: 'E04', name: '鉛球 (田)', type: 'field' }
+    ];
+
+    const historyYearDatabase = {
+        '2025': { 'E01': 42, 'E02': 58, 'E03': 35, 'E04': 29 },
+        '2024': { 'E01': 38, 'E02': 62, 'E03': 30, 'E04': 33 },
+        '2023': { 'E01': 45, 'E02': 50, 'E03': 40, 'E04': 25 }
+    };
+
+    function handleLogin(event) {
+        event.preventDefault();
+        document.getElementById('loginOverlay').style.display = 'none';
+        document.getElementById('adminPanel').style.display = 'flex';
+        document.getElementById('welcomeText').innerText = `歡迎回來，${document.getElementById('tname').value} 老師`;
+        document.getElementById('roleText').innerText = `權限：${document.getElementById('ttype').value === 'PE' ? '體育老師' : '系統管理員'}`;
+        initData(); renderTable(); updateCharts();
+    }
+
+    function initData() {
+        const classes = ['1A', '2B', '3C', '4A', '5D'];
+        const groups = ['甲組', '乙組', '丙組'];
+        for (let i = 1; i <= 30; i++) {
+            let e1 = i % 3 === 0 ? 'E01' : (i % 3 === 1 ? 'E02' : 'E03');
+            let e2 = i % 2 === 0 ? 'E04' : 'none';
+            studentsData.push({
+                studid: 233000 + i, 
+                name: "學生" + i, 
+                class: classes[i % 5],
+                genderGroup: (i % 2 === 0 ? "男" : "女") + groups[i % 3],
+                eid1: e1, eid2: e2, eid3: 'none', isEditing: false
+            });
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('studentTable');
+        tbody.innerHTML = '';
+        document.getElementById('dataCount').innerText = `總報名人數: ${studentsData.length}`;
+
+        studentsData.forEach((s, index) => {
+            const tr = document.createElement('tr');
+            if (s.isEditing) {
+                tr.innerHTML = `
+                    <td><input type="text" class="edit-input" id="studid_${index}" value="${s.studid}"></td>
+                    <td><input type="text" class="edit-input" id="name_${index}" value="${s.name}"></td>
+                    <td><input type="text" class="edit-input" id="class_${index}" value="${s.class}"></td>
+                    <td><select class="edit-select" id="group_${index}">
+                        ${['男甲組','男乙組','男丙組','女甲組','女乙組','女丙組'].map(g => `<option ${s.genderGroup===g?'selected':''}>${g}</option>`).join('')}
+                    </select></td>
+                    ${[1, 2, 3].map(num => `
+                        <td><select class="edit-select" id="eid${num}_${index}">
+                            ${events.map(ev => `<option value="${ev.id}" ${s['eid'+num]===ev.id?'selected':''}>${ev.name}</option>`).join('')}
+                        </select></td>
+                    `).join('')}
+                    <td><button class="btn btn-save" onclick="saveRow(${index})">儲存</button>
+                        <button class="btn btn-cancel" onclick="toggleEdit(${index})">取消</button></td>`;
+            } else {
+                const getEv = (id) => events.find(e => e.id === id).name;
+                tr.innerHTML = `
+                    <td class="studid-cell">${s.studid}</td><td><strong>${s.name}</strong></td><td>${s.class}</td>
+                    <td><span class="badge-group">${s.genderGroup}</span></td>
+                    <td>${getEv(s.eid1)}</td><td>${getEv(s.eid2)}</td><td>${getEv(s.eid3)}</td>
+                    <td><button class="btn btn-edit" onclick="toggleEdit(${index})">編輯</button>
+                        <button class="btn btn-delete" onclick="deleteRow(${index})">刪除</button></td>`;
+            }
+            tbody.appendChild(tr);
+        });
+    }
+
+    function saveRow(index) {
+        const sel1 = document.getElementById(`eid1_${index}`);
+        const sel2 = document.getElementById(`eid2_${index}`);
+        const sel3 = document.getElementById(`eid3_${index}`);
+        
+        [sel1, sel2, sel3].forEach(s => s.classList.remove('input-error'));
+
+        const v1 = sel1.value, v2 = sel2.value, v3 = sel3.value;
+        const selectedIds = [v1, v2, v3].filter(id => id !== 'none');
+
+        if (selectedIds.length !== new Set(selectedIds).size) {
+            [sel1, sel2, sel3].forEach(s => { if(selectedIds.filter(x=>x===s.value && x!=='none').length > 1) s.classList.add('input-error'); });
+            alert("錯誤：報名項目不能重複！"); return;
+        }
+
+        if (selectedIds.length === 3) {
+            const types = selectedIds.map(id => events.find(ev => ev.id === id).type);
+            if (!types.includes('track') || !types.includes('field')) {
+                [sel1, sel2, sel3].forEach(s => s.classList.add('input-error'));
+                alert("規則提示：報名「三個」項目時，必須同時包含田賽和徑賽！");
+                return;
+            }
+        }
+
+        const row = studentsData[index];
+        row.studid = document.getElementById(`studid_${index}`).value;
+        row.name = document.getElementById(`name_${index}`).value;
+        row.class = document.getElementById(`class_${index}`).value;
+        row.genderGroup = document.getElementById(`group_${index}`).value;
+        row.eid1 = v1; row.eid2 = v2; row.eid3 = v3;
+        row.isEditing = false;
+        renderTable(); updateCharts();
+    }
+
+    function toggleEdit(index) { studentsData[index].isEditing = !studentsData[index].isEditing; renderTable(); }
+    function deleteRow(index) { if(confirm("確定刪除？")) { studentsData.splice(index, 1); renderTable(); updateCharts(); } }
+
+    let barChart, pieChart, compareChart;
+    function updateCharts() {
+        // 獲取目前篩選選單狀態
+        const selectedDashGender = document.getElementById('dashboardGenderSelect') ? document.getElementById('dashboardGenderSelect').value : 'all';
+        const selectedDashGroup = document.getElementById('dashboardGroupSelect') ? document.getElementById('dashboardGroupSelect').value : 'all';
+        const selectedDashEvent = document.getElementById('dashboardEventSelect') ? document.getElementById('dashboardEventSelect').value : 'all';
+
+        // 初始化統計
+        const stats = { 'E01': 0, 'E02': 0, 'E03': 0, 'E04': 0 };
+        const genderStats = {
+            'E01': { male: 0, female: 0 },
+            'E02': { male: 0, female: 0 },
+            'E03': { male: 0, female: 0 },
+            'E04': { male: 0, female: 0 }
+        };
+        let maleFilteredTotal = 0, femaleFilteredTotal = 0;
+
+        // 核心交叉數據統計
+        studentsData.forEach(s => {
+            const isMale = s.genderGroup.startsWith('男');
+            const studentGenderStr = isMale ? '男' : '女';
+
+            if (selectedDashGender !== 'all' && studentGenderStr !== selectedDashGender) return;
+            if (selectedDashGroup !== 'all' && !s.genderGroup.includes(selectedDashGroup)) return;
+
+            let registeredAny = false;
+            [s.eid1, s.eid2, s.eid3].forEach(id => { 
+                if(id !== 'none') {
+                    stats[id]++; 
+                    if(isMale) genderStats[id].male++; else genderStats[id].female++;
+                    registeredAny = true;
+                }
+            });
+
+            if(registeredAny) {
+                if(isMale) maleFilteredTotal++; else femaleFilteredTotal++;
+            }
+        });
+
+        let filterTag = '';
+        if (selectedDashGender !== 'all') filterTag += selectedDashGender;
+        if (selectedDashGroup !== 'all') filterTag += selectedDashGroup;
+        if (filterTag === '') filterTag = '全體學生';
+
+        // === 核心優化點：動態處理圓餅圖顯示/隱藏與外部 CSS 佈局轉換 ===
+        const gridWrapper = document.getElementById('chartsGridWrapper');
+        const pieContainer = document.getElementById('pieChartContainer');
+
+        if(barChart) barChart.destroy(); 
+        if(pieChart) pieChart.destroy();
+
+        if (selectedDashGender !== 'all') {
+            // 【隱藏圓餅圖模式】使用者主動挑選了單一性別
+            pieContainer.style.display = 'none'; // 隱藏 DOM
+            gridWrapper.classList.add('single-column'); // CSS 網格切換為單欄，讓條形圖完美撐滿
+        } else {
+            // 【顯示圓餅圖模式】性別為「無選擇」
+            pieContainer.style.display = 'block'; // 顯示 DOM
+            gridWrapper.classList.remove('single-column'); // 還原為兩欄排版
+        }
+        
+        let barDataStructure;
+
+        if (selectedDashEvent === 'all') {
+            // 【全部項目綜合統計】
+            barDataStructure = {
+                labels: ['60米', '100米', '跳遠', '鉛球'],
+                datasets: [{
+                    label: `各項報名總人次 (${filterTag})`,
+                    data: [stats.E01, stats.E02, stats.E03, stats.E04],
+                    backgroundColor: selectedDashGender === '女' ? '#e74c3c' : '#3498db'
+                }]
+            };
+
+            // 只有在需要顯示圓餅圖時才進行繪製
+            if (selectedDashGender === 'all') {
+                pieChart = new Chart(document.getElementById('pieChart'), {
+                    type: 'doughnut',
+                    data: { labels: [`男 (${filterTag})`, `女 (${filterTag})`], datasets: [{ data: [maleFilteredTotal, femaleFilteredTotal], backgroundColor: ['#2980b9', '#e74c3c'] }] },
+                    options: { maintainAspectRatio: false }
+                });
+            }
+        } else {
+            // 【單一指定項目統計】
+            const currentEventObj = events.find(e => e.id === selectedDashEvent);
+            let datasetsArray = [];
+            
+            if (selectedDashGender === 'all' || selectedDashGender === '男') {
+                datasetsArray.push({
+                    label: '男生人數',
+                    data: [genderStats[selectedDashEvent].male],
+                    backgroundColor: '#2980b9'
+                });
+            }
+            if (selectedDashGender === 'all' || selectedDashGender === '女') {
+                datasetsArray.push({
+                    label: '女生人數',
+                    data: [genderStats[selectedDashEvent].female],
+                    backgroundColor: '#e74c3c'
+                });
+            }
+
+            barDataStructure = {
+                labels: [`${currentEventObj.name} (${filterTag})`],
+                datasets: datasetsArray
+            };
+
+            // 只有在需要顯示圓餅圖時才進行繪製
+            if (selectedDashGender === 'all') {
+                pieChart = new Chart(document.getElementById('pieChart'), {
+                    type: 'doughnut',
+                    data: { labels: ['男 (指定篩選)', '女 (指定篩選)'], datasets: [{ data: [genderStats[selectedDashEvent].male, genderStats[selectedDashEvent].female], backgroundColor: ['#2980b9', '#e74c3c'] }] },
+                    options: { maintainAspectRatio: false }
+                });
+            }
+        }
+
+        // 繪製條形圖
+        barChart = new Chart(document.getElementById('barChart'), {
+            type: 'bar',
+            data: barDataStructure,
+            options: { 
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+
+        // === 年度數據對比更新邏輯 (維持全校總體數據對比) ===
+        const globalStats = { 'E01': 0, 'E02': 0, 'E03': 0, 'E04': 0 };
+        studentsData.forEach(s => {
+            [s.eid1, s.eid2, s.eid3].forEach(id => { if(id !== 'none') globalStats[id]++; });
+        });
+
+        const selectedYear = document.getElementById('compareYearSelect') ? document.getElementById('compareYearSelect').value : '2025';
+        const activeHistoryData = historyYearDatabase[selectedYear];
+
+        if(compareChart) compareChart.destroy();
+        compareChart = new Chart(document.getElementById('compareChart'), {
+            type: 'bar',
+            data: {
+                labels: ['60米', '100米', '跳遠', '鉛球'],
+                datasets: [
+                    { label: `${selectedYear} 年度 (最終)`, data: [activeHistoryData.E01, activeHistoryData.E02, activeHistoryData.E03, activeHistoryData.E04], backgroundColor: '#bdc3c7' },
+                    { label: '本屆 (實時總計)', data: [globalStats.E01, globalStats.E02, globalStats.E03, globalStats.E04], backgroundColor: '#2ecc71' }
+                ]
+            },
+            options: { maintainAspectRatio: false }
+        });
+
+        const compTbody = document.getElementById('comparisonTableBody');
+        if (compTbody) {
+            compTbody.innerHTML = '';
+            ['E01', 'E02', 'E03', 'E04'].forEach(id => {
+                const diff = globalStats[id] - activeHistoryData[id];
+                compTbody.innerHTML += `<tr>
+                    <td>${events.find(e=>e.id===id).name}</td>
+                    <td>${activeHistoryData[id]}</td>
+                    <td>${globalStats[id]}</td>
+                    <td class="${diff>=0?'trend-up':'trend-down'}">${diff>=0?'▲':'▼'} ${Math.abs(diff)}</td>
+                </tr>`;
+            });
+        }
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById(id).style.display = 'block';
+        if(id === 'dashboard') document.getElementById('nav-dash').classList.add('active');
+        else if(id === 'comparison') document.getElementById('nav-compare').classList.add('active');
+        else document.getElementById('nav-stud').classList.add('active');
+        updateCharts();
+    }
+</script>
+</body>
+</html>
